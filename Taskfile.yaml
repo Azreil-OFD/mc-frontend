@@ -11,7 +11,6 @@ vars:
   PROD_CONTAINER_NAME: nuxt3-prod
   PORT: '{{ default "3000" .PORT }}'
 
-
 tasks:
   default:
     desc: Показать текущую версию проекта из package.json и список доступных команд
@@ -24,8 +23,9 @@ tasks:
       - echo "  task prod    🚀 Сборка и запуск в продакшене"
       - echo "  task build   🛠 Только сборка продакшн-образа"
       - echo "  task         📦 Показать эту справку"
+
   show:
-    desk: Выводит список переменных
+    desc: Выводит список переменных
     silent: true
     cmds:
       - "echo 📦 VERSION: {{.VERSION}}"
@@ -33,38 +33,63 @@ tasks:
       - "echo 🚪 PORT: {{.PORT}}"
       - "echo 📁 DEV_CONTAINER_NAME: {{.DEV_CONTAINER_NAME}}"
       - "echo 📁 PROD_CONTAINER_NAME: {{.PROD_CONTAINER_NAME}}"
+
+  build-image:
+    desc: Умная сборка":" buildx если есть, иначе BuildKit
+    silent: true
+    cmds:
+      - |
+        if docker buildx version >/dev/null 2>&1; then
+          echo "🛠 Используется buildx"
+          docker buildx build --load -t {{.IMAGE_TAG}} --target {{.TARGET}} .
+        else
+          echo "🛠 Используется обычный build с BuildKit"
+          DOCKER_BUILDKIT=1 docker build -t {{.IMAGE_TAG}} --target {{.TARGET}} .
+        fi
+
   dev:
     desc: Запуск Nuxt 3 в режиме разработки (hot reload)
+    vars:
+      TARGET: development
     cmds:
       - echo "🧹 Удаляем старый dev-контейнер (если был)..."
       - docker rm -f {{.DEV_CONTAINER_NAME}} || true
-      - echo "🐳 Сборка контейнера {{.IMAGE_TAG}} для разработки..."
-      - docker build -t {{.IMAGE_TAG}} --target development .
+      - task: build-image
+        vars:
+          TARGET: "{{.TARGET}}"
       - echo "🚀 Запуск контейнера для разработки..."
-      - docker run -d --name {{.DEV_CONTAINER_NAME}} -p {{.PORT}}:3000 -v .:/app -v /app/node_modules  -v /app/.nuxt  -v /app/.data {{.IMAGE_TAG}}
+      - docker run -d --name {{.DEV_CONTAINER_NAME}} -p {{.PORT}}:3000 -v .:/app -v /app/node_modules -v /app/.nuxt -v /app/.data {{.IMAGE_TAG}}
       - lazydocker
       - docker stop {{.DEV_CONTAINER_NAME}}
+
   prod:
     desc: Сборка и запуск Nuxt 3 в продакшене
+    vars:
+      TARGET: production
     cmds:
       - echo "🧹 Удаляем старый prod-контейнер (если был)..."
       - docker rm -f {{.PROD_CONTAINER_NAME}} || true
-      - echo "🐳 Сборка контейнера {{.IMAGE_TAG}} для продакшена..."
-      - docker build -t {{.IMAGE_TAG}} --target production .
+      - task: build-image
+        vars:
+          TARGET: "{{.TARGET}}"
       - echo "🚀 Запуск контейнера для продакшена..."
       - docker run -d --name {{.PROD_CONTAINER_NAME}} -p {{.PORT}}:3000 {{.IMAGE_TAG}}
       - lazydocker
       - docker stop {{.DEV_CONTAINER_NAME}}
+
   build:
     desc: Только сборка Nuxt 3 для продакшена
+    vars:
+      TARGET: production
     cmds:
-      - echo "🐳 Сборка контейнера {{.IMAGE_TAG}} (production)..."
-      - docker build -t {{.IMAGE_TAG}} --target production .
+      - task: build-image
 
   test:
     desc: Запуск unit-тестов внутри контейнера
+    vars:
+      TARGET: development
     cmds:
       - echo "🧪 Сборка контейнера для тестов..."
-      - docker build -t {{.IMAGE_TAG}} --target development .
+      - task: build-image
       - echo "🚀 Запуск тестов в контейнере..."
       - docker run --rm -v .:/app -v /app/node_modules {{.IMAGE_TAG}} sh -c "npm install && npm run test"
