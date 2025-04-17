@@ -11,6 +11,7 @@ export default defineNuxtConfig({
     '@nuxt/content',
     '@primevue/nuxt-module',
     '@vueuse/nuxt',
+    '@pinia/nuxt'
   ],
   primevue: {
     options: {
