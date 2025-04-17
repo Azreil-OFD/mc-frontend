@@ -1,0 +1,391 @@
+openapi: 3.0.3
+info:
+  title: ModSender API
+  version: 1.0.0
+  description: API для скачивания zip-архива с модами
+servers:
+  - url: http://localhost:8080
+    description: Локальный сервер
+paths:
+  /auth:
+    post:
+      summary: Авторизация пользователя
+      description: Проверяет логин и пароль, возвращает JWT-токен при успехе
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - username
+                - password
+              properties:
+                username:
+                  type: string
+                  example: player123
+                password:
+                  type: string
+                  example: secretpassword
+      responses:
+        "200":
+          description: Успешная авторизация
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: boolean
+                    example: true
+                  token:
+                    type: string
+                    description: JWT-токен
+                    example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        "400":
+          description: Неверный формат запроса
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: Неверный формат запроса
+        "401":
+          description: Неверный логин или пароль
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: Неверные учетные данные
+        "500":
+          description: Внутренняя ошибка сервера
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: Внутренняя ошибка сервера
+  /online:
+    get:
+      summary: Получить список пользователей и их онлайн-статус
+      description: >
+        Возвращает список всех пользователей с информацией, кто из них сейчас онлайн.  
+        Поддерживает фильтрацию по онлайн-статусу и поиск по имени.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: onlyOnline
+          in: query
+          required: false
+          description: >
+            Фильтрация по статусу онлайн.  
+            - `true` — только онлайн пользователи  
+            - `false` — только оффлайн пользователи  
+            - если не указан — вернуть всех
+          schema:
+            type: boolean
+        - name: search
+          in: query
+          required: false
+          description: Поиск по username (частичное совпадение)
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Успешно получен список пользователей
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: boolean
+                    example: true
+                  users:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/UserOnlineInfo"
+        "500":
+          description: Внутренняя ошибка сервера
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: Внутренняя ошибка сервера
+  /download:
+    get:
+      summary: Скачать zip-архив с модами
+      description: Отдаёт zip-архив, содержащий файлы модов
+      responses:
+        "200":
+          description: Архив успешно скачан
+          headers:
+            Content-Length:
+              description: Размер архива в байтах
+              schema:
+                type: integer
+                format: int64
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: Архив не найден
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: Архив не найден
+        "500":
+          description: Внутренняя ошибка сервера
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: Внутренняя ошибка сервера
+  /health:
+    get:
+      summary: Проверка работоспособности сервиса
+      description: Возвращает 200 OK, если сервис работает
+      responses:
+        "200":
+          description: Сервис работает
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: OK
+
+  /list:
+    get:
+      summary: Получить список модов из папки mods
+      description: Возвращает список модов с указанием, активен ли каждый из них
+      responses:
+        "200":
+          description: Список модов успешно получен
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: boolean
+                    example: true
+                  mods:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ModInfo"
+        "500":
+          description: Внутренняя ошибка сервера
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: Внутренняя ошибка сервера
+
+  /upload:
+    post:
+      summary: Загрузить моды
+      description: >
+        Загружает один или несколько .jar файлов модов в папку `mods`.  
+        Поддерживаются частичные загрузки. Возвращаются причины отклонения файлов.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                files:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+                  description: Один или несколько `.jar` файлов
+      responses:
+        "201":
+          description: Все файлы успешно загружены
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/UploadSuccessResponse"
+                  - type: object
+                    properties:
+                      status:
+                        type: boolean
+                        example: true
+        "207":
+          description: Частично успешно. Некоторые файлы были отклонены
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/UploadConflictResponse"
+                  - type: object
+                    properties:
+                      status:
+                        type: boolean
+                        example: false
+        "409":
+          description: Ни один файл не был загружен — все отклонены
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/UploadConflictResponse"
+                  - type: object
+                    properties:
+                      status:
+                        type: boolean
+                        example: false
+        "400":
+          description: Ошибка запроса или формат не multipart/form-data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: Ошибка формата запроса
+        "500":
+          description: Внутренняя ошибка сервера
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: Внутренняя ошибка сервера
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    UserOnlineInfo:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Username пользователя (используется как идентификатор)
+          example: "player123"
+        username:
+          type: string
+          description: Отображаемое имя пользователя (realname)
+          example: "Player One"
+        online:
+          type: boolean
+          description: Признак, находится ли пользователь онлайн
+          example: true
+        lastSeen:
+          type: integer
+          format: int64
+          description: Время последнего выхода из сети (Unix-время в секундах). Присутствует только если пользователь оффлайн.
+          example: 1712400300
+    UploadSuccessResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: Все файлы успешно загружены
+        uploaded:
+          type: array
+          description: Файлы, успешно загруженные на сервер
+          items:
+            type: string
+          example: ["mod1.jar", "mod2.jar"]
+
+    UploadConflictResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: Некоторые файлы не были загружены
+        uploaded:
+          type: array
+          description: Файлы, успешно загруженные на сервер
+          items:
+            type: string
+          example: ["mod1.jar", "mod3.jar"]
+        conflicts:
+          type: array
+          description: Файлы, которые уже существуют в папке mods
+          items:
+            type: string
+          example: ["mod2.jar"]
+        invalid:
+          type: array
+          description: Файлы с недопустимым расширением или содержимым
+          items:
+            type: string
+          example: ["readme.txt", "virus.exe"]
+
+    ModInfo:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Название файла мода
+          example: mod1.jar
+        active:
+          type: boolean
+          description: Признак, активен ли мод
+          example: true
