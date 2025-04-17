@@ -93,3 +93,67 @@ tasks:
       - task: build-image
       - echo "🚀 Запуск тестов в контейнере..."
       - docker run --rm -v .:/app -v /app/node_modules {{.IMAGE_TAG}} sh -c "npm install && npm run test"
+  release:
+    desc: 📦 Релиз (major|minor|patch). Фиксация, слияние в release, пуш.
+    silent: true
+    cmds:
+      - |
+        if ! echo "{{.CLI_ARGS}}" | grep -q -- "--yes"; then
+          echo "❌ Добавь --yes для подтверждения релиза (пример: task release minor --yes)"
+          exit 1
+        fi
+
+        PART=$(echo "{{.CLI_ARGS}}" | awk '{print $1}')
+        if ! echo "$PART" | grep -qE '^(major|minor|patch)$'; then
+          echo "❌ Первый аргумент должен быть 'major', 'minor' или 'patch'"
+          exit 1
+        fi
+
+        CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+
+        # Проверка на незакоммиченные изменения
+        if [ -n "$(git status --porcelain)" ]; then
+          echo "📝 Есть незакоммиченные изменения. Фиксируем..."
+          git add .
+          git commit -m "[Общее] Фиксация для релиза"
+        fi
+
+        echo "📦 Текущая версия: $(jq -r .version package.json)"
+
+        # Обновление версии
+        VERSION=$(jq -r '.version' package.json)
+        MAJOR=$(echo "$VERSION" | cut -d. -f1)
+        MINOR=$(echo "$VERSION" | cut -d. -f2)
+        PATCH=$(echo "$VERSION" | cut -d. -f3)
+
+        if [ "$PART" = "major" ]; then
+          MAJOR=$((MAJOR + 1))
+          MINOR=0
+          PATCH=0
+        elif [ "$PART" = "minor" ]; then
+          MINOR=$((MINOR + 1))
+          PATCH=0
+        elif [ "$PART" = "patch" ]; then
+          PATCH=$((PATCH + 1))
+        fi
+
+        NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+        jq --arg v "$NEW_VERSION" '.version = $v' package.json > package.tmp.json && mv package.tmp.json package.json
+        git add package.json
+        git commit -m "[Общее] Обновление версии: $VERSION → $NEW_VERSION"
+
+        echo "🔀 Переключаемся на ветку release..."
+        git fetch origin
+        git checkout release
+        git pull origin release
+
+        echo "🔁 Вливаем изменения из $CURRENT_BRANCH в release..."
+        git merge "$CURRENT_BRANCH" --no-ff -m "[Общее] Релиз из ветки $CURRENT_BRANCH"
+
+        echo "📤 Пуш в origin release..."
+        git push origin release
+
+        echo "↩️ Возврат на ветку $CURRENT_BRANCH"
+        git checkout "$CURRENT_BRANCH"
+
+        echo "✅ Релиз завершён: $VERSION → $NEW_VERSION"
