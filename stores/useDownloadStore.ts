@@ -3,7 +3,7 @@ import { defineStore } from 'pinia'
 
 export const useDownloadStore = defineStore('download', () => {
   function downloadArchive(): Blob | { status: false; message: string } {
-    const archiveExists = true
+    const archiveExists = Math.random() < 0.5
 
     if (archiveExists) {
       return new Blob(['zip-content'], { type: 'application/zip' })

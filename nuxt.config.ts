@@ -16,7 +16,10 @@ export default defineNuxtConfig({
   primevue: {
     options: {
       theme: {
-        preset: Nora
+        preset: Nora,
+        options: {
+          darkModeSelector: false || 'none',
+      }
       }
     }
   },
