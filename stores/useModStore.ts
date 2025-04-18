@@ -1,6 +1,6 @@
 // stores/mods.ts
 import { defineStore } from 'pinia'
-import { Ref, ref } from 'vue'
+import { ref } from 'vue'
 
 export const useModStore = defineStore('mods', () => {
   const mods: Ref<{name: string, active: boolean}[]> = ref([
@@ -22,7 +22,7 @@ export const useModStore = defineStore('mods', () => {
       if(typeof name !== 'string') {
         continue
       }
-      
+      // @ts-ignore
       if (!name.endsWith('.jar')) {
         invalid.push(name)
       } else if (mods.value.some(mod => mod.name === name)) {
